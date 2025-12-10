@@ -1,10 +1,10 @@
 CC=g++
 
-CFLAGS=$(shell pkg-config --cflags opencv) 
-LIBS=$(shell pkg-config --libs opencv) 
+CFLAGS=$(shell pkg-config --cflags opencv)
+LIBS=$(shell pkg-config --libs opencv)
 
-OBJS= main.o  TASK1.o TASK2.o TASK3.o TASK4.o TASK5.o SHA256.o SIMPLESOCKET.o
-DEMOTARGET=main server client mainTest
+OBJS= main.o  TASK3.o SHA256.o SIMPLESOCKET.o
+DEMOTARGET=main server client
 
 client.o:	client.C
 	$(CC) -c $<  -std=c++11
@@ -18,26 +18,12 @@ SIMPLESOCKET.o:	SIMPLESOCKET.C
 SHA256.o:	SHA256.C
 	$(CC) -c $<  -std=c++11
 
-TASK1.o:	TASK1.C
-	$(CC) -c $<  -std=c++11
-
-TASK2.o:	TASK2.C
-	$(CC) -c $<  -std=c++11
-
 TASK3.o:	TASK3.C
 	$(CC) -c $<  -std=c++11
 
-TASK4.o:	TASK4.C
-	$(CC) -c $<  -std=c++11 
-
-TASK5.o:	TASK5.C
-	$(CC) -c $<  -std=c++11 
-
 main.o:	main.C
-	$(CC) -c $<  -std=c++11	
+	$(CC) -c $<  -std=c++11
 
-mainTest.o:	mainTest.C
-	$(CC) -c $<  -std=c++11		
 
 
 
@@ -57,12 +43,12 @@ clean:
 	-rm -r -f   $(DEMOTARGET) *.o DOXYGENDOC  *.txt
 
 doc:
-	doxygen Doxyfile 
+	doxygen Doxyfile
 
 
 all:	$(DEMOTARGET)
-	make clean  && make main && make server && make client && make mainTest
+	make clean  && make main && make server && make client
 
-run:	main	
+run:	main
 	./main
 
