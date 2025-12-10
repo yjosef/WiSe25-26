@@ -1,6 +1,7 @@
 #Mkaefile 
 #10. 12. 2025 15:24
 #10.12.2025 15:44
+#10.12.2025 15:59
 CC=g++
 
 CFLAGS=$(shell pkg-config --cflags opencv) 
