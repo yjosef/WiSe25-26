@@ -1,4 +1,5 @@
-#10. 12. 2025 15:24 
+#10. 12. 2025 15:24
+#10.12.2025 15:44
 CC=g++
 
 CFLAGS=$(shell pkg-config --cflags opencv) 
