@@ -36,14 +36,22 @@ int main(){
 
 string MySrv::myResponse(string input){
     int x,y, e;
-    e = sscanf(input.c_str(),"COORD[%d,%d]",&x,&y);
-    if(e != 2){
-        return string("ERROR");
-    }else{
-        return (to_string(x+y));
+
+    if(input .compare(0,7,"NEWGAME") == 0){
+        return string("OK1");
     }
 
-return string("MySrv");
+    if(input .compare(0,5,"SHOT[") == 0){
+
+        e = sscanf(input.c_str(),"SHOT[%d,%d]",&x,&y);
+        if(e != 2){
+            return string("ERROR");
+        }else{
+            return (to_string(x+y));
+        }
+    }
+
+return string("Unknown cmd");
 
 
 }
