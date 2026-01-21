@@ -19,12 +19,14 @@
 #include <string>
 
 #include "SIMPLESOCKET.H"
+#include "TASK3.H"
 
 
 class MySrv : public TCPserver{
 public:
-    MySrv(int port, int bsize) : TCPserver(port, bsize){};
+    MySrv(int port, int bsize) : TCPserver(port, bsize){w = new TASK3::World();};
     protected:
+    TASK3::World *w;
     string myResponse(string input);
 };
 
@@ -38,7 +40,13 @@ string MySrv::myResponse(string input){
     int x,y, e;
 
     if(input .compare(0,7,"NEWGAME") == 0){
-        return string("OK1");
+
+        if(w != nullptr){
+            delete w;
+        }
+
+        w = new TASK3::World();
+        return string("OK");
     }
 
     if(input .compare(0,5,"SHOT[") == 0){
