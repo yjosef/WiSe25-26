@@ -16,11 +16,37 @@
 #include <sys/socket.h> // for socket creation
 #include <netinet/in.h> //contains constants and structures needed for internet domain addresses
 
+#include <string>
+
 #include "SIMPLESOCKET.H"
 
 
+class MySrv : public TCPserver{
+public:
+    MySrv(int port, int bsize) : TCPserver(port, bsize){};
+    protected:
+    string myResponse(string input);
+};
+
 int main(){
 	srand(time(nullptr));
-	TCPserver srv(2022,25);
+	MySrv srv(2025,25);
 	srv.run();
 }
+
+string MySrv::myResponse(string input){
+    int x,y, e;
+    e = sscanf(input.c_str(),"COORD[%d,%d]",&x,&y);
+    if(e != 2){
+        return string("ERROR");
+    }else{
+        return (to_string(x+y));
+    }
+
+return string("MySrv");
+
+
+}
+
+
+
