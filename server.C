@@ -54,10 +54,21 @@ string MySrv::myResponse(string input){
         e = sscanf(input.c_str(),"SHOT[%d,%d]",&x,&y);
         if(e != 2){
             return string("ERROR");
-        }else{
-            return (to_string(x+y));
         }
+        TASK3::ShootResult r;
+        r = w->shoot(x,y);
+
+        w->printBoard();
+
+        switch(r){
+            case TASK3::WATER:          return (string("WATER"));
+            case TASK3::SHIP_HIT:       return (string("SHIP_HIT"));
+            case TASK3::SHIP_DESTROYED: return (string("SHIP_DESTROYED"));
+            case TASK3::GAME_OVER:      return (string("GAME_OVER"));
+            default:                    return string ("ERROR");
+            }
     }
+
 
 return string("Unknown cmd");
 
