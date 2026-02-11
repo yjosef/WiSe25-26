@@ -1,7 +1,8 @@
-//============================================================================
-// Name        : INF3_Prak.cpp
-// Beschreibung: Client für Schiffe versenken (Einfache Version)
-//============================================================================
+/*
+ * client.C
+ * Einfacher Client für Schiffe versenken
+ * Passt genau zu deiner server.C (Port 2025)
+ */
 
 #include <iostream>
 #include <string>
@@ -14,304 +15,211 @@
 #include <arpa/inet.h> // für Netzwerkverbindung
 #include <sys/socket.h>
 #include <algorithm>   // für random_shuffle
-#include <fstream>     // für Datei speichern (CSV)
+#include <fstream>     // für Datei speichern
 
 using namespace std;
 
-// =============================================================
-// 1. KLASSE FÜR DIE VERBINDUNG (Ganz simpel gehalten)
-// =============================================================
+// ------------------------------------------------------------------
+// 1. NETZWERK-HELFER (Damit main() sauber bleibt)
+// ------------------------------------------------------------------
 class SimpleClient {
-private:
+public:
     int sock;
     struct sockaddr_in serverAdresse;
 
-public:
-    SimpleClient() {
-        sock = -1;
-    }
-
-    // Verbindung zum Server herstellen
+    // Verbinden
     bool verbinden(string ip, int port) {
-        // Socket erstellen
         sock = socket(AF_INET, SOCK_STREAM, 0);
-        if (sock == -1) {
-            return false;
-        }
+        if (sock == -1) return false;
 
         serverAdresse.sin_addr.s_addr = inet_addr(ip.c_str());
         serverAdresse.sin_family = AF_INET;
         serverAdresse.sin_port = htons(port);
 
-        // Verbinden
         if (connect(sock, (struct sockaddr *)&serverAdresse, sizeof(serverAdresse)) < 0) {
             return false;
         }
         return true;
     }
 
-    // Nachricht senden
-    void senden(string nachricht) {
-        send(sock, nachricht.c_str(), nachricht.size(), 0);
+    // Senden
+    void senden(string text) {
+        send(sock, text.c_str(), text.size(), 0);
     }
 
-    // Nachricht empfangen
+    // Empfangen
     string empfangen() {
         char buffer[1024];
-        memset(buffer, 0, 1024); // Buffer leeren
-        int anzahlBytes = recv(sock, buffer, 1024, 0);
-        if (anzahlBytes < 0) {
-            return "";
-        }
+        memset(buffer, 0, 1024);
+        recv(sock, buffer, 1024, 0);
         return string(buffer);
     }
 
-    // Verbindung schließen (wichtig für sauberes Beenden)
+    // Trennen
     void trennen() {
         close(sock);
     }
 };
 
-// =============================================================
-// 2. HILFSFUNKTIONEN
-// =============================================================
+// Eine Koordinate
+struct Punkt { int x; int y; };
 
-// Eine kleine Struktur für Koordinaten (x und y)
-struct Punkt {
-    int x;
-    int y;
-};
-
-// Diese Funktion führt EINEN Schuss aus und gibt die Antwort des Servers zurück
-// Sie baut den String "COORD[x;y]" zusammen.
-string schiesseAuf(SimpleClient &client, int x, int y) {
-    string befehl = "COORD[" + to_string(x) + ";" + to_string(y) + "]";
+// ------------------------------------------------------------------
+// 2. SCHUSS-FUNKTION
+// ------------------------------------------------------------------
+// Baut den Befehl genau so, wie dein Server ihn will: SHOT[x,y]
+string schuss(SimpleClient &client, int x, int y) {
+    // WICHTIG: Dein Server nutzt ein KOMMA! SHOT[1,1]
+    string befehl = "SHOT[" + to_string(x) + "," + to_string(y) + "]";
     client.senden(befehl);
-    string antwort = client.empfangen();
-    return antwort;
+    return client.empfangen();
 }
 
-// =============================================================
-// 3. DIE STRATEGIEN
-// =============================================================
+// ------------------------------------------------------------------
+// 3. STRATEGIEN
+// ------------------------------------------------------------------
 
-// Strategie 1: Einfach Zeile für Zeile durchgehen
-int strategie1_Zeilenweise(SimpleClient &client) {
+// Strategie 1: Zeile für Zeile (1,1 -> 1,2 -> ...)
+int strat_Zeilen(SimpleClient &client) {
     int versuche = 0;
-
-    // Y von 1 bis 10 (Zeilen)
     for (int y = 1; y <= 10; y++) {
-        // X von 1 bis 10 (Spalten)
         for (int x = 1; x <= 10; x++) {
             versuche++;
-            string antwort = schiesseAuf(client, x, y);
-
-            // Wenn das Spiel vorbei ist, sofort aufhören
-            if (antwort.find("GAME_OVER") != string::npos) {
-                return versuche;
-            }
+            string antwort = schuss(client, x, y);
+            if (antwort.find("GAME_OVER") != string::npos) return versuche;
         }
     }
     return versuche;
 }
 
-// Strategie 2: Schachbrettmuster (Erst alle schwarzen Felder, dann alle weißen)
-int strategie2_Schachbrett(SimpleClient &client) {
+// Strategie 2: Schachbrett (Erst schwarze Felder, dann weiße)
+int strat_Schachbrett(SimpleClient &client) {
     int versuche = 0;
-
-    // RUNDE 1: Nur Felder, wo (x+y) gerade ist
+    // Durchgang 1: Gerade Summe
     for (int y = 1; y <= 10; y++) {
         for (int x = 1; x <= 10; x++) {
             if ((x + y) % 2 == 0) {
                 versuche++;
-                string antwort = schiesseAuf(client, x, y);
-                if (antwort.find("GAME_OVER") != string::npos) return versuche;
+                if (schuss(client, x, y).find("GAME_OVER") != string::npos) return versuche;
             }
         }
     }
-
-    // RUNDE 2: Der Rest (ungerade Summe)
+    // Durchgang 2: Ungerade Summe
     for (int y = 1; y <= 10; y++) {
         for (int x = 1; x <= 10; x++) {
             if ((x + y) % 2 != 0) {
                 versuche++;
-                string antwort = schiesseAuf(client, x, y);
-                if (antwort.find("GAME_OVER") != string::npos) return versuche;
+                if (schuss(client, x, y).find("GAME_OVER") != string::npos) return versuche;
             }
         }
     }
     return versuche;
 }
 
-// Strategie 3: Zufall (Wir erstellen eine Liste aller Felder und mischen sie)
-int strategie3_Zufall(SimpleClient &client) {
+// Strategie 3: Zufall (Alles mischen und abarbeiten)
+int strat_Zufall(SimpleClient &client) {
     int versuche = 0;
-    vector<Punkt> alleFelder;
+    vector<Punkt> liste;
+    // Liste füllen
+    for (int x = 1; x <= 10; x++) for (int y = 1; y <= 10; y++) liste.push_back({x, y});
+    // Liste mischen
+    random_shuffle(liste.begin(), liste.end());
 
-    // Liste füllen mit allen 100 Koordinaten
-    for (int x = 1; x <= 10; x++) {
-        for (int y = 1; y <= 10; y++) {
-            Punkt p;
-            p.x = x;
-            p.y = y;
-            alleFelder.push_back(p);
-        }
-    }
-
-    // Die Liste mischen (Shuffle)
-    random_shuffle(alleFelder.begin(), alleFelder.end());
-
-    // Die gemischte Liste abarbeiten
-    for (size_t i = 0; i < alleFelder.size(); i++) {
+    for (size_t i = 0; i < liste.size(); i++) {
         versuche++;
-        string antwort = schiesseAuf(client, alleFelder[i].x, alleFelder[i].y);
-        if (antwort.find("GAME_OVER") != string::npos) return versuche;
+        if (schuss(client, liste[i].x, liste[i].y).find("GAME_OVER") != string::npos) return versuche;
     }
     return versuche;
 }
 
-// Strategie 4: Zufall + "Search and Destroy" (Die Intelligente)
-int strategie4_Smart(SimpleClient &client) {
+// Strategie 4: Smart (Zufall + Nachbarn prüfen bei Treffer)
+int strat_Smart(SimpleClient &client) {
     int versuche = 0;
+    bool besucht[12][12] = {false}; // Merken, wo wir waren
+    vector<Punkt> ziele; // Liste für Nachbartreffer
 
-    // Wir merken uns, wo wir schon geschossen haben, damit wir nichts doppelt machen
-    bool besucht[12][12];
-    for(int i=0; i<12; i++) for(int j=0; j<12; j++) besucht[i][j] = false;
-
-    // Liste für Zufallsschüsse vorbereiten
-    vector<Punkt> zufallsListe;
-    for (int x = 1; x <= 10; x++) {
-        for (int y = 1; y <= 10; y++) {
-            Punkt p = {x, y};
-            zufallsListe.push_back(p);
-        }
-    }
-    random_shuffle(zufallsListe.begin(), zufallsListe.end());
-    int zufallsIndex = 0;
-
-    // Liste für Ziele, wenn wir ein Schiff getroffen haben (Stapel)
-    vector<Punkt> zielListe;
+    // Zufallsliste vorbereiten
+    vector<Punkt> zufall;
+    for (int x = 1; x <= 10; x++) for (int y = 1; y <= 10; y++) zufall.push_back({x, y});
+    random_shuffle(zufall.begin(), zufall.end());
+    int zIndex = 0;
 
     while (true) {
-        Punkt aktuellesZiel;
-        bool habeZiel = false;
+        Punkt p;
 
-        // SCHRITT 1: Haben wir ein konkretes Ziel (weil wir ein Schiff getroffen haben)?
-        if (zielListe.size() > 0) {
-            aktuellesZiel = zielListe.back(); // Letztes Element nehmen
-            zielListe.pop_back();             // Und aus der Liste löschen
-            habeZiel = true;
-        }
-        // SCHRITT 2: Kein Ziel? Dann nimm einen Zufallspunkt
-        else {
-            if (zufallsIndex < zufallsListe.size()) {
-                aktuellesZiel = zufallsListe[zufallsIndex];
-                zufallsIndex++;
-                habeZiel = true;
-            }
+        // Haben wir ein Ziel (Nachbar von Treffer)?
+        if (!ziele.empty()) {
+            p = ziele.back();
+            ziele.pop_back();
+        } else {
+            // Sonst nimm Zufall
+            if (zIndex >= zufall.size()) break; // Sollte nicht passieren
+            p = zufall[zIndex];
+            zIndex++;
         }
 
-        // Sicherheitscheck: Koordinaten gültig? Schon besucht?
-        if (aktuellesZiel.x < 1 || aktuellesZiel.x > 10 ||
-            aktuellesZiel.y < 1 || aktuellesZiel.y > 10 ||
-            besucht[aktuellesZiel.x][aktuellesZiel.y] == true) {
-            continue; // Überspringen und Schleife neu starten
-        }
+        // Gültig checken (1-10) und ob schon besucht
+        if (p.x < 1 || p.x > 10 || p.y < 1 || p.y > 10 || besucht[p.x][p.y]) continue;
 
-        // SCHRITT 3: Schießen!
-        besucht[aktuellesZiel.x][aktuellesZiel.y] = true; // Als besucht markieren
+        // Schießen
+        besucht[p.x][p.y] = true;
         versuche++;
+        string antwort = schuss(client, p.x, p.y);
 
-        string antwort = schiesseAuf(client, aktuellesZiel.x, aktuellesZiel.y);
+        if (antwort.find("GAME_OVER") != string::npos) return versuche;
 
-        // Prüfen was passiert ist
-        if (antwort.find("GAME_OVER") != string::npos) {
-            return versuche; // Fertig!
-        }
-
-        // Wenn Treffer (HIT) oder Versenkt (DESTROYED), Nachbarn zur ZielListe hinzufügen
-        if (antwort.find("HIT") != string::npos || antwort.find("SHIP_DESTROYED") != string::npos) {
-            // Nachbar Rechts
-            zielListe.push_back({aktuellesZiel.x + 1, aktuellesZiel.y});
-            // Nachbar Links
-            zielListe.push_back({aktuellesZiel.x - 1, aktuellesZiel.y});
-            // Nachbar Unten
-            zielListe.push_back({aktuellesZiel.x, aktuellesZiel.y + 1});
-            // Nachbar Oben
-            zielListe.push_back({aktuellesZiel.x, aktuellesZiel.y - 1});
+        // Wenn Treffer -> Nachbarn merken
+        if (antwort.find("HIT") != string::npos || antwort.find("DESTROYED") != string::npos) {
+            ziele.push_back({p.x + 1, p.y}); // Rechts
+            ziele.push_back({p.x - 1, p.y}); // Links
+            ziele.push_back({p.x, p.y + 1}); // Unten
+            ziele.push_back({p.x, p.y - 1}); // Oben
         }
     }
     return versuche;
 }
 
-// =============================================================
-// 4. MAIN PROGRAMM
-// =============================================================
+// ------------------------------------------------------------------
+// 4. HAUPTPROGRAMM
+// ------------------------------------------------------------------
 int main() {
-    srand(time(NULL)); // Zufallsgenerator starten
+    srand(time(NULL));
+    SimpleClient client;
 
-    SimpleClient meinClient;
-
-    cout << "--- Client gestartet ---" << endl;
-    cout << "Verbinde zu 127.0.0.1 auf Port 2000..." << endl;
-
-    // Versuche zu verbinden
-    if (meinClient.verbinden("127.0.0.1", 2000)) {
-        cout << "Connected" << endl; // Genau wie im Protokoll gefordert
-    } else {
-        cout << "Fehler: Konnte Server nicht finden. (Läuft ./server ?)" << endl;
+    // PORT 2025 WIE IM SERVER!
+    if (!client.verbinden("127.0.0.1", 2025)) {
+        cout << "Fehler: Kein Server auf Port 2025 gefunden!" << endl;
         return 1;
     }
+    cout << "Verbunden mit Server." << endl;
 
-    // Strategie Auswahl
-    int wahl = 0;
-    cout << "\nWelche Strategie soll getestet werden?" << endl;
-    cout << "1: Zeilenweise" << endl;
-    cout << "2: Schachbrett" << endl;
-    cout << "3: Zufall" << endl;
-    cout << "4: Zufall + Smart (Search & Destroy)" << endl;
-    cout << "Eingabe: ";
+    int wahl;
+    cout << "Strategie waehlen (1-4): ";
     cin >> wahl;
 
-    // Vektor um Ergebnisse zu speichern
-    vector<int> ergebnisse;
-    int anzahlSpiele = 1000; // Vorgabe aus Protokoll [cite: 52]
+    ofstream datei("StatisticalData.csv");
+    datei << "Spiel;Versuche\n"; // Header für CSV
 
-    cout << "Starte " << anzahlSpiele << " Spiele..." << endl;
+    // 1000 Spiele Loop
+    for (int i = 0; i < 1000; i++) {
 
-    for (int i = 0; i < anzahlSpiele; i++) {
-
-        // Neues Spiel anfordern beim Server
-        meinClient.senden("NEWGAME");
-        string antwort = meinClient.empfangen(); // Server sagt "NEWGAME" zurück
+        // Neues Spiel starten
+        client.senden("NEWGAME");
+        string check = client.empfangen(); // Warten auf "OK" vom Server
 
         int versuche = 0;
+        if (wahl == 1) versuche = strat_Zeilen(client);
+        else if (wahl == 2) versuche = strat_Schachbrett(client);
+        else if (wahl == 3) versuche = strat_Zufall(client);
+        else versuche = strat_Smart(client);
 
-        // Gewählte Strategie ausführen
-        if (wahl == 1) versuche = strategie1_Zeilenweise(meinClient);
-        else if (wahl == 2) versuche = strategie2_Schachbrett(meinClient);
-        else if (wahl == 3) versuche = strategie3_Zufall(meinClient);
-        else if (wahl == 4) versuche = strategie4_Smart(meinClient);
-        else versuche = strategie1_Zeilenweise(meinClient); // Default
-
-        // Ergebnis speichern und anzeigen
-        ergebnisse.push_back(versuche);
-        cout << "Game " << (i + 1) << ": needed " << versuche << " attempts" << endl; // Ausgabe laut Protokoll [cite: 139]
+        // Speichern und Anzeigen
+        datei << (i+1) << ";" << versuche << "\n";
+        cout << "Game " << (i+1) << ": needed " << versuche << " attempts" << endl;
     }
 
-    // Statistik in Datei speichern (CSV)
-    ofstream datei("StatisticalData.csv"); // Dateiname laut Protokoll [cite: 53]
-    if (datei.is_open()) {
-        datei << "Spiel;Versuche\n";
-        for (size_t i = 0; i < ergebnisse.size(); i++) {
-            datei << (i + 1) << ";" << ergebnisse[i] << "\n";
-        }
-        datei.close();
-        cout << "Statistical Data exported" << endl; // Ausgabe laut Protokoll [cite: 140]
-    } else {
-        cout << "Fehler beim Speichern der Datei!" << endl;
-    }
-
-    meinClient.trennen();
+    datei.close();
+    cout << "Daten gespeichert in StatisticalData.csv" << endl;
+    client.trennen();
     return 0;
 }
