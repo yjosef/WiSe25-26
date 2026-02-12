@@ -10,84 +10,86 @@
 #include <sys/socket.h>
 #include <algorithm>
 #include <fstream>
+#include <limits>
 
 using namespace std;
-
 
 class SimpleClient {
 public:
     int sock;
-    struct sockaddr_in serverAdresse;
+    struct sockaddr_in address;
 
-
-    bool verbinden(string ip, int port) {
+    bool connectToServer(string ip, int port) {
         sock = socket(AF_INET, SOCK_STREAM, 0);
-        if (sock == -1) return false;
+        if (sock == -1) {
+            return false;
+        }
 
-        serverAdresse.sin_addr.s_addr = inet_addr(ip.c_str());
-        serverAdresse.sin_family = AF_INET;
-        serverAdresse.sin_port = htons(port);
+        address.sin_addr.s_addr = inet_addr(ip.c_str());
+        address.sin_family = AF_INET;
+        address.sin_port = htons(port);
 
-        if (connect(sock, (struct sockaddr *)&serverAdresse, sizeof(serverAdresse)) < 0) {
+        if (connect(sock, (struct sockaddr*)&address, sizeof(address)) < 0) {
             return false;
         }
         return true;
     }
 
-
-    void senden(string text) {
-        send(sock, text.c_str(), text.size(), 0);
+    void sendMessage(string message) {
+        send(sock, message.c_str(), message.size(), 0);
     }
 
-
-    string empfangen() {
+    string receiveMessage() {
         char buffer[1024];
         memset(buffer, 0, 1024);
-        recv(sock, buffer, 1024, 0);
+        int len = recv(sock, buffer, 1024, 0);
+        if (len <= 0) {
+            return "";
+        }
         return string(buffer);
     }
 
-
-    void trennen() {
+    void closeConnection() {
         close(sock);
     }
 };
 
+struct Point {
+    int x;
+    int y;
+};
 
-struct Punkt { int x; int y; };
-
-
-string schuss(SimpleClient &client, int x, int y) {
-
-    string befehl = "SHOT[" + to_string(x) + "," + to_string(y) + "]";
-    client.senden(befehl);
-    return client.empfangen();
+string shoot(SimpleClient &client, int x, int y) {
+    string command = "SHOT[" + to_string(x) + "," + to_string(y) + "]";
+    client.sendMessage(command);
+    return client.receiveMessage();
 }
 
-
-
-// Strategie 1: Zeile für Zeile
-int strat_Zeilen(SimpleClient &client) {
-    int versuche = 0;
+int strategy1(SimpleClient &client) {
+    int attempts = 0;
     for (int y = 1; y <= 10; y++) {
         for (int x = 1; x <= 10; x++) {
-            versuche++;
-            string antwort = schuss(client, x, y);
-            if (antwort.find("GAME_OVER") != string::npos) return versuche;
+            attempts++;
+            string response = shoot(client, x, y);
+            if (response.find("GAME_OVER") != string::npos) {
+                return attempts;
+            }
         }
     }
-    return versuche;
+    return attempts;
 }
 
-// Strategie 2: Schachbrett
-int strat_Schachbrett(SimpleClient &client) {
-    int versuche = 0;
-
+int strategy2(SimpleClient &client) {
+    int attempts = 0;
+    
     for (int y = 1; y <= 10; y++) {
         for (int x = 1; x <= 10; x++) {
             if ((x + y) % 2 == 0) {
-                versuche++;
-                if (schuss(client, x, y).find("GAME_OVER") != string::npos) return versuche;
+                attempts++;
+                string response = shoot(client, x, y);
+                if (response.find("GAME_OVER") != string::npos) {
+                    return attempts;
+                }
             }
         }
     }
@@ -95,116 +97,166 @@ int strat_Schachbrett(SimpleClient &client) {
     for (int y = 1; y <= 10; y++) {
         for (int x = 1; x <= 10; x++) {
             if ((x + y) % 2 != 0) {
-                versuche++;
-                if (schuss(client, x, y).find("GAME_OVER") != string::npos) return versuche;
+                attempts++;
+                string response = shoot(client, x, y);
+                if (response.find("GAME_OVER") != string::npos) {
+                    return attempts;
+                }
             }
         }
     }
-    return versuche;
+    return attempts;
 }
 
-// Strategie 3: Zufall
-int strat_Zufall(SimpleClient &client) {
-    int versuche = 0;
-    vector<Punkt> liste;
+int strategy3(SimpleClient &client) {
+    int attempts = 0;
+    vector<Point> points;
 
-    for (int x = 1; x <= 10; x++) for (int y = 1; y <= 10; y++) liste.push_back({x, y});
-
-    random_shuffle(liste.begin(), liste.end());
-
-    for (size_t i = 0; i < liste.size(); i++) {
-        versuche++;
-        if (schuss(client, liste[i].x, liste[i].y).find("GAME_OVER") != string::npos) return versuche;
+    for (int x = 1; x <= 10; x++) {
+        for (int y = 1; y <= 10; y++) {
+            Point p;
+            p.x = x;
+            p.y = y;
+            points.push_back(p);
+        }
     }
-    return versuche;
+
+    random_shuffle(points.begin(), points.end());
+
+    for (size_t i = 0; i < points.size(); i++) {
+        attempts++;
+        string response = shoot(client, points[i].x, points[i].y);
+        if (response.find("GAME_OVER") != string::npos) {
+            return attempts;
+        }
+    }
+    return attempts;
 }
 
-// Strategie 4: Smart (Zufall + Nachbarn)
-int strat_Smart(SimpleClient &client) {
-    int versuche = 0;
-    bool besucht[12][12] = {false};
-    vector<Punkt> ziele;
+int strategy4(SimpleClient &client) {
+    int attempts = 0;
+    bool visited[12][12];
+    
+    for (int i = 0; i < 12; i++) {
+        for (int j = 0; j < 12; j++) {
+            visited[i][j] = false;
+        }
+    }
 
+    vector<Point> randomPoints;
+    for (int x = 1; x <= 10; x++) {
+        for (int y = 1; y <= 10; y++) {
+            Point p;
+            p.x = x;
+            p.y = y;
+            randomPoints.push_back(p);
+        }
+    }
+    random_shuffle(randomPoints.begin(), randomPoints.end());
+    int randomIndex = 0;
 
-    vector<Punkt> zufall;
-    for (int x = 1; x <= 10; x++) for (int y = 1; y <= 10; y++) zufall.push_back({x, y});
-    random_shuffle(zufall.begin(), zufall.end());
-    int zIndex = 0;
+    vector<Point> targets;
 
     while (true) {
-        Punkt p;
+        Point currentPoint;
+        bool hasTarget = false;
 
-
-        if (!ziele.empty()) {
-            p = ziele.back();
-            ziele.pop_back();
+        if (targets.size() > 0) {
+            currentPoint = targets.back();
+            targets.pop_back();
+            hasTarget = true;
         } else {
-
-            if (zIndex >= zufall.size()) break;
-            p = zufall[zIndex];
-            zIndex++;
+            if (randomIndex < randomPoints.size()) {
+                currentPoint = randomPoints[randomIndex];
+                randomIndex++;
+                hasTarget = true;
+            }
         }
 
+        if (hasTarget == false) {
+            break; 
+        }
 
-        if (p.x < 1 || p.x > 10 || p.y < 1 || p.y > 10 || besucht[p.x][p.y]) continue;
+        if (currentPoint.x < 1 || currentPoint.x > 10) continue;
+        if (currentPoint.y < 1 || currentPoint.y > 10) continue;
+        if (visited[currentPoint.x][currentPoint.y] == true) continue;
 
+        visited[currentPoint.x][currentPoint.y] = true;
+        attempts++;
 
-        besucht[p.x][p.y] = true;
-        versuche++;
-        string antwort = schuss(client, p.x, p.y);
+        string response = shoot(client, currentPoint.x, currentPoint.y);
 
-        if (antwort.find("GAME_OVER") != string::npos) return versuche;
+        if (response.find("GAME_OVER") != string::npos) {
+            return attempts;
+        }
 
-
-        if (antwort.find("HIT") != string::npos || antwort.find("DESTROYED") != string::npos) {
-            ziele.push_back({p.x + 1, p.y});
-            ziele.push_back({p.x - 1, p.y});
-            ziele.push_back({p.x, p.y + 1});
-            ziele.push_back({p.x, p.y - 1});
+        if (response.find("HIT") != string::npos || response.find("DESTROYED") != string::npos) {
+            Point p1; p1.x = currentPoint.x + 1; p1.y = currentPoint.y; targets.push_back(p1);
+            Point p2; p2.x = currentPoint.x - 1; p2.y = currentPoint.y; targets.push_back(p2);
+            Point p3; p3.x = currentPoint.x; p3.y = currentPoint.y + 1; targets.push_back(p3);
+            Point p4; p4.x = currentPoint.x; p4.y = currentPoint.y - 1; targets.push_back(p4);
         }
     }
-    return versuche;
+    return attempts;
 }
-
 
 int main() {
     srand(time(NULL));
     SimpleClient client;
 
-
-    if (!client.verbinden("127.0.0.1", 2025)) {
-        cout << "Error: No Server on Port 2025!" << endl;
+    if (client.connectToServer("127.0.0.1", 2025) == false) {
+        cout << "Connection failed" << endl;
         return 1;
     }
-    cout << "Connected to the Server." << "\n" << "Welcome to Schiffeversenken" << "\n" << "The strategies: " << endl;
+    cout << "Connected" << endl;
 
-    int wahl;
-    cout << "Line for Line (1)" << "\n" << "Chessboard (2)" << "\n" << "Random (3)" << "\n" << "Smart (Random + Neighbour) (4)" << "\n" << "Select strategy (1-4): ";
-    cin >> wahl;
+    string command;
 
-    ofstream datei("StatisticalData.csv");
-    datei << "Games;Attempts\n";
+    while (true) {
+        cout << "Enter command (NEWGAME or QUIT): ";
+        cin >> command;
 
+        if (command == "QUIT") {
+            break;
+        }
 
-    for (int i = 0; i < 1000; i++) {
+        if (command == "NEWGAME") {
+            int strategy = 0;
+            cout << "Select Strategy (1-4): ";
+            cin >> strategy;
 
+            if (strategy < 1 || strategy > 4) {
+                cout << "Invalid strategy" << endl;
+                continue;
+            }
 
-        client.senden("NEWGAME");
-        string check = client.empfangen();
+            ofstream file("StatisticalData.csv");
+            file << "Game;Attempts\n";
 
-        int versuche = 0;
-        if (wahl == 1) versuche = strat_Zeilen(client);
-        else if (wahl == 2) versuche = strat_Schachbrett(client);
-        else if (wahl == 3) versuche = strat_Zufall(client);
-        else versuche = strat_Smart(client);
+            for (int i = 0; i < 1000; i++) {
+                client.sendMessage("NEWGAME");
+                string check = client.receiveMessage();
 
+                int attempts = 0;
+                if (strategy == 1) {
+                    attempts = strategy1(client);
+                } else if (strategy == 2) {
+                    attempts = strategy2(client);
+                } else if (strategy == 3) {
+                    attempts = strategy3(client);
+                } else {
+                    attempts = strategy4(client);
+                }
 
-        datei << (i+1) << ";" << versuche << "\n";
-        cout << "Games " << (i+1) << ": needed " << versuche << " attempts" << endl;
+                file << (i + 1) << ";" << attempts << "\n";
+            }
+            file.close();
+            cout << "Finished 1000 games" << endl;
+        } else {
+            cout << "Unknown command" << endl;
+        }
     }
 
-    datei.close();
-    cout << "Datas saved in StatisticalData.csv" << endl;
-    client.trennen();
+    client.closeConnection();
     return 0;
 }
